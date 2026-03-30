@@ -322,8 +322,8 @@
           <div class="timeline-wrap">
             <div class="timeline-top">
               <span>0 dage</span>
-              <span id="elapsedDaysLabel">0.00 / 30.00 dage</span>
-              <span id="totalDaysLabel">30 dage</span>
+              <span id="elapsedDaysLabel">0.00 dage gået</span>
+              <span id="totalDaysLabel">52.5 dage pr. svingperiode</span>
             </div>
             <div class="timeline">
               <div class="timeline-fill" id="timelineFill"></div>
@@ -423,11 +423,15 @@
         <div class="control">
           <div class="control-head">
             <span>Lyd ved ny dag</span>
-            <span id="beepValue">Fra</span>
+            <span id="beepValue">Til</span>
           </div>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;color:var(--text); margin-bottom: 8px;">
+            <input id="beepToggle" type="checkbox" checked style="width:18px;height:18px;cursor:pointer;" />
+            <span>Lyd aktiv</span>
+          </label>
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;color:var(--text);">
-            <input id="beepToggle" type="checkbox" style="width:18px;height:18px;cursor:pointer;" />
-            <span>Afspil et lille bip ved hver ny dag</span>
+            <input id="continuousToneToggle" type="checkbox" checked style="width:18px;height:18px;cursor:pointer;" />
+            <span>Kontinuerlig tone med 5% volume-accent pr. dag</span>
           </label>
         </div>
 
@@ -503,27 +507,40 @@
     const playPauseBtn = document.getElementById('playPauseBtn');
     const resetBtn = document.getElementById('resetBtn');
     const beepToggle = document.getElementById('beepToggle');
+    const continuousToneToggle = document.getElementById('continuousToneToggle');
     const beepValue = document.getElementById('beepValue');
     const angleTableBody = document.getElementById('angleTableBody');
 
     const state = {
-      realDuration: parseFloat(durationSlider.value),
-      simulatedDays: parseFloat(daysSlider.value),
-      easing: parseFloat(easingSlider.value),
-      amplitude: parseFloat(amplitudeSlider.value),
-      beepLowFreq: parseFloat(beepLowSlider.value),
-      beepHighFreq: parseFloat(beepHighSlider.value),
-      orbitADays: parseFloat(orbitADaysSlider.value),
-      orbitBDays: parseFloat(orbitBDaysSlider.value),
+      realDuration: 56,
+      simulatedDays: 52.5,
+      easing: 0,
+      amplitude: 30,
+      beepLowFreq: 440,
+      beepHighFreq: 2200,
+      orbitADays: 32.5,
+      orbitBDays: 97,
       orbitADirection: 1,
       orbitBDirection: 1,
       elapsedMs: 0,
       lastTs: 0,
       running: true,
-      beepEnabled: false,
+      beepEnabled: true,
+      continuousTone: true,
       lastBeepDay: -1,
       audioCtx: null,
+      toneOsc: null,
+      toneGain: null,
     };
+
+    durationSlider.value = String(56);
+    daysSlider.value = String(52.5);
+    easingSlider.value = String(0);
+    amplitudeSlider.value = String(30);
+    beepLowSlider.value = String(440);
+    beepHighSlider.value = String(2200);
+    orbitADaysSlider.value = String(32.5);
+    orbitBDaysSlider.value = String(97);
 
     function updateLabels() {
       durationValue.textContent = `${state.realDuration.toFixed(1)} s`;
@@ -536,8 +553,8 @@
       orbitBDaysValue.textContent = `${state.orbitBDays.toFixed(1)} dage`;
       orbitADirectionValue.textContent = state.orbitADirection === 1 ? 'Med uret' : 'Mod uret';
       orbitBDirectionValue.textContent = state.orbitBDirection === 1 ? 'Med uret' : 'Mod uret';
-      totalDaysLabel.textContent = `${state.simulatedDays.toFixed(0)} dage`;
-      beepValue.textContent = state.beepEnabled ? 'Til' : 'Fra';
+      totalDaysLabel.textContent = `${state.simulatedDays.toFixed(1)} dage pr. svingperiode`;
+      beepValue.textContent = !state.beepEnabled ? 'Fra' : (state.continuousTone ? 'Kontinuerlig' : 'Enkelte bip');
     }
 
     // Kurve: blander sinus med en mere aggressiv center-acceleration.
@@ -556,12 +573,16 @@
       return `${min}m ${sec.toFixed(1)}s`;
     }
 
-    function playBeep(frequency) {
-      if (!state.beepEnabled) return;
+    function ensureAudio() {
       if (!state.audioCtx) {
         state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       }
-      const ctx = state.audioCtx;
+      return state.audioCtx;
+    }
+
+    function playBeep(frequency) {
+      if (!state.beepEnabled || state.continuousTone) return;
+      const ctx = ensureAudio();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
@@ -575,6 +596,38 @@
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.13);
+    }
+
+    function startContinuousTone(frequency) {
+      if (!state.beepEnabled || !state.continuousTone) return;
+      const ctx = ensureAudio();
+      if (!state.toneOsc) {
+        state.toneOsc = ctx.createOscillator();
+        state.toneGain = ctx.createGain();
+        state.toneOsc.type = 'sine';
+        state.toneGain.gain.value = 0.035;
+        state.toneOsc.connect(state.toneGain);
+        state.toneGain.connect(ctx.destination);
+        state.toneOsc.start();
+      }
+      state.toneOsc.frequency.setTargetAtTime(frequency, ctx.currentTime, 0.03);
+      state.toneGain.gain.setTargetAtTime(0.035, ctx.currentTime, 0.03);
+    }
+
+    function stopContinuousTone() {
+      if (state.toneGain && state.audioCtx) {
+        state.toneGain.gain.setTargetAtTime(0.0001, state.audioCtx.currentTime, 0.03);
+      }
+    }
+
+    function accentContinuousTone() {
+      if (!state.beepEnabled || !state.continuousTone || !state.toneGain || !state.audioCtx) return;
+      const now = state.audioCtx.currentTime;
+      const base = 0.035;
+      state.toneGain.gain.cancelScheduledValues(now);
+      state.toneGain.gain.setValueAtTime(base, now);
+      state.toneGain.gain.linearRampToValueAtTime(base * 1.15, now + 0.04);
+      state.toneGain.gain.linearRampToValueAtTime(base, now + 0.15);
     }
 
     function getBeepFrequencyAtAngle(angle) {
@@ -599,7 +652,7 @@
     }
 
     function getBaseAtProgress(progressFraction) {
-      const t = (progressFraction % 1) * Math.PI * 2;
+      const t = progressFraction * Math.PI * 2;
       return shapedOscillation(t, state.easing);
     }
 
@@ -649,8 +702,8 @@
 
     function render() {
       const progress = (state.elapsedMs / 1000) / state.realDuration;
-      const wrapped = progress % 1;
-      const t = wrapped * Math.PI * 2;
+      const simulatedElapsedDays = progress * state.simulatedDays;
+      const t = progress * Math.PI * 2;
 
       const base = shapedOscillation(t, state.easing);
       const angleA = base * state.amplitude;
@@ -664,21 +717,33 @@
       armB.style.left = '50%';
       armB.style.top = '50%';
 
-      const elapsedDays = wrapped * state.simulatedDays;
-      const pct = wrapped * 100;
+      const elapsedDays = simulatedElapsedDays;
+      const cycleProgress = state.simulatedDays > 0 ? ((elapsedDays % state.simulatedDays) / state.simulatedDays) : 0;
+      const pct = cycleProgress * 100;
       updateOrbitDots(elapsedDays);
 
       angleAReadout.textContent = `${angleA.toFixed(2)}°`;
       angleBReadout.textContent = `${angleB.toFixed(2)}°`;
       realReadout.textContent = formatRealTime(state.elapsedMs / 1000);
-      elapsedDaysLabel.textContent = `${elapsedDays.toFixed(2)} / ${state.simulatedDays.toFixed(2)} dage`;
+      elapsedDaysLabel.textContent = `${elapsedDays.toFixed(2)} dage gået`;
       timelineFill.style.width = `${pct}%`;
       timelineMarker.style.left = `${pct}%`;
+
+      const currentFrequency = getBeepFrequencyAtAngle(angleA);
+      if (state.beepEnabled && state.continuousTone && state.running) {
+        startContinuousTone(currentFrequency);
+      } else {
+        stopContinuousTone();
+      }
 
       const wholeDay = Math.floor(elapsedDays);
       if (state.running && state.beepEnabled && wholeDay !== state.lastBeepDay) {
         if (elapsedDays > 0) {
-          playBeep(getBeepFrequencyAtAngle(angleA));
+          if (state.continuousTone) {
+            accentContinuousTone();
+          } else {
+            playBeep(currentFrequency);
+          }
         }
         state.lastBeepDay = wholeDay;
       }
@@ -776,15 +841,33 @@
       render();
     });
 
+    beepToggle.checked = true;
+    continuousToneToggle.checked = true;
+
     beepToggle.addEventListener('change', async () => {
       state.beepEnabled = beepToggle.checked;
-      if (state.beepEnabled && !state.audioCtx) {
-        state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = ensureAudio();
+      if (ctx && ctx.state === 'suspended') {
+        await ctx.resume();
       }
-      if (state.audioCtx && state.audioCtx.state === 'suspended') {
-        await state.audioCtx.resume();
+      if (!state.beepEnabled) {
+        stopContinuousTone();
       }
       updateLabels();
+      render();
+    });
+
+    continuousToneToggle.addEventListener('change', async () => {
+      state.continuousTone = continuousToneToggle.checked;
+      const ctx = ensureAudio();
+      if (ctx && ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+      if (!state.continuousTone) {
+        stopContinuousTone();
+      }
+      updateLabels();
+      render();
     });
 
     updateLabels();
