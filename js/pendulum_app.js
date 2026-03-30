@@ -41,6 +41,9 @@ const elements = {
   timelineFill: $("timelineFill"),
   timelineMarker: $("timelineMarker"),
   beepValue: $("beepValue"),
+  stage: $("stage"),
+  lastAlignmentValue: $("lastAlignmentValue"),
+  nextAlignmentValue: $("nextAlignmentValue"),
 };
 
 const DEFAULTS = {
@@ -64,6 +67,10 @@ const state = {
   lastTs: 0,
   running: true,
   lastBeepDay: -1,
+  lastAlignmentDay: null,
+  nextAlignmentDay: null,
+  lastAlignmentIndex: -1,
+  alignmentFlashLock: false,
 };
 
 const audio = {
@@ -128,6 +135,26 @@ const audio = {
     this.toneGain.gain.linearRampToValueAtTime(base * this.accentFactor, now + 0.02);
     this.toneGain.gain.linearRampToValueAtTime(base, now + 0.15);
   },
+  playAlignmentBeep() {
+    if (!state.beepEnabled) return;
+
+    const ctx = this.ensureContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(1320, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.08);
+
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.07, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.17);
+  },
 };
 
 const simulation = {
@@ -168,6 +195,58 @@ const simulation = {
     }
     return false;
   },
+  normalizeAngle(rad) {
+    let a = rad % (Math.PI * 2);
+    if (a < 0) a += Math.PI * 2;
+    return a;
+  },
+
+  getOrbitAngles(elapsedDays) {
+    const angleA = (elapsedDays / state.orbitADays) * Math.PI * 2 * state.orbitADirection;
+    const angleB = (elapsedDays / state.orbitBDays) * Math.PI * 2 * state.orbitBDirection;
+
+    return {
+      angleA: this.normalizeAngle(angleA),
+      angleB: this.normalizeAngle(angleB),
+    };
+  },
+
+  getAlignmentDelta(elapsedDays) {
+    const { angleA, angleB } = this.getOrbitAngles(elapsedDays);
+    let diff = Math.abs(angleA - angleB);
+    if (diff > Math.PI) diff = Math.PI * 2 - diff;
+    return diff;
+  },
+
+  formatDayTime(dayFloat) {
+    const day = Math.floor(dayFloat);
+    const hourFloat = (dayFloat - day) * 24;
+    const hour = Math.floor(hourFloat);
+    const minute = Math.floor((hourFloat - hour) * 60);
+
+    return `Dag ${day}, ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  },
+
+  findNextAlignment(fromDay) {
+    const maxSearchDays = Math.max(state.orbitADays, state.orbitBDays) * 4;
+    const step = 1 / 24; // 1 time
+    const threshold = 0.01;
+
+    const startDay = Math.floor(fromDay) + 1;
+    let prevDelta = this.getAlignmentDelta(startDay);
+
+    for (let d = startDay + step; d <= startDay + maxSearchDays; d += step) {
+      const currentDelta = this.getAlignmentDelta(d);
+
+      if (currentDelta < threshold || (currentDelta > prevDelta && prevDelta < threshold * 2)) {
+        return d - step;
+      }
+
+      prevDelta = currentDelta;
+    }
+
+    return null;
+  },
 };
 
 const ui = {
@@ -199,6 +278,9 @@ const ui = {
     elements.totalDaysLabel.textContent = `${state.simulatedDays.toFixed(1)} dage pr. svingperiode`;
     elements.beepValue.textContent = !state.beepEnabled ? "Fra" : state.continuousTone ? "Kontinuerlig" : "Enkelte bip";
     elements.playPauseBtn.textContent = state.running ? "Pause" : "Afspil";
+    elements.lastAlignmentValue.textContent = state.lastAlignmentDay === null ? "Ingen endnu" : simulation.formatDayTime(state.lastAlignmentDay);
+
+    elements.nextAlignmentValue.textContent = state.nextAlignmentDay === null ? "Ikke fundet" : simulation.formatDayTime(state.nextAlignmentDay);
   },
   updateOrbitDots(elapsedDays) {
     const angleA = (elapsedDays / state.orbitADays) * Math.PI * 2 * state.orbitADirection;
@@ -240,6 +322,9 @@ const ui = {
   render() {
     const progress = state.elapsedMs / 1000 / state.realDuration;
     const simulatedElapsedDays = progress * state.simulatedDays;
+    const alignmentDelta = simulation.getAlignmentDelta(simulatedElapsedDays);
+    const alignmentThreshold = 0.01;
+    const alignmentIndex = Math.floor(simulatedElapsedDays * 24); // time buckets
     const { angleA, angleB } = simulation.getAngles(progress);
 
     elements.armA.style.transform = `translate(-50%, -50%) rotate(${angleA}deg)`;
@@ -278,6 +363,15 @@ const ui = {
       }
       state.lastBeepDay = wholeDay;
     }
+    if (alignmentDelta < alignmentThreshold && alignmentIndex !== state.lastAlignmentIndex) {
+      state.lastAlignmentIndex = alignmentIndex;
+      state.lastAlignmentDay = simulatedElapsedDays;
+      state.nextAlignmentDay = simulation.findNextAlignment(simulatedElapsedDays + 1 / 24);
+
+      audio.playAlignmentBeep();
+      this.flashAlignment();
+      this.updateLabels();
+    }
   },
   updateOrbitSizes() {
     const stageRect = elements.stage.getBoundingClientRect();
@@ -288,6 +382,13 @@ const ui = {
 
     elements.orbitA.style.setProperty("--orbit-a-size", `${orbitASize}px`);
     elements.orbitB.style.setProperty("--orbit-b-size", `${orbitBSize}px`);
+  },
+  flashAlignment() {
+    if (!elements.stage) return;
+
+    elements.stage.classList.remove("flash");
+    void elements.stage.offsetWidth;
+    elements.stage.classList.add("flash");
   },
 };
 
@@ -313,6 +414,7 @@ const controller = {
       ui.updateLabels();
       ui.updateAngleTable();
       ui.render();
+      this.refreshAlignmentPredictions();
     });
 
     elements.easingSlider.addEventListener("input", () => {
@@ -353,24 +455,28 @@ const controller = {
       state.orbitADays = parseFloat(elements.orbitADaysSlider.value);
       ui.updateLabels();
       ui.render();
+      this.refreshAlignmentPredictions();
     });
 
     elements.orbitBDaysSlider.addEventListener("input", () => {
       state.orbitBDays = parseFloat(elements.orbitBDaysSlider.value);
       ui.updateLabels();
       ui.render();
+      this.refreshAlignmentPredictions();
     });
 
     elements.orbitADirectionToggle.addEventListener("change", () => {
       state.orbitADirection = elements.orbitADirectionToggle.checked ? -1 : 1;
       ui.updateLabels();
       ui.render();
+      this.refreshAlignmentPredictions();
     });
 
     elements.orbitBDirectionToggle.addEventListener("change", () => {
       state.orbitBDirection = elements.orbitBDirectionToggle.checked ? -1 : 1;
       ui.updateLabels();
       ui.render();
+      this.refreshAlignmentPredictions();
     });
 
     elements.playPauseBtn.addEventListener("click", () => {
@@ -412,6 +518,7 @@ const controller = {
   init() {
     ui.syncControlsToState();
     ui.updateLabels();
+    this.refreshAlignmentPredictions();
     ui.updateOrbitSizes();
     ui.updateAngleTable();
     ui.render();
@@ -421,6 +528,11 @@ const controller = {
       ui.render();
     });
     requestAnimationFrame((ts) => this.tick(ts));
+  },
+  refreshAlignmentPredictions() {
+    const currentDay = (state.elapsedMs / 1000 / state.realDuration) * state.simulatedDays;
+    state.nextAlignmentDay = simulation.findNextAlignment(currentDay);
+    ui.updateLabels();
   },
 };
 

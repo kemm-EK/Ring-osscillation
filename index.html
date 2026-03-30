@@ -8,7 +8,7 @@
   </head>
   <body>
     <div class="app">
-      <h1>Simulation af 2 modsat svingende lodrette streger</h1>
+      <h1>Toma Celestial Elements</h1>
       <p class="sub">
         Stregerne roterer om deres center mellem <strong>−30°</strong> og <strong>+30°</strong> i hver sin modsatte fase. Du kan styre hastighed, antal simulerede dage og hvor meget de accelererer mod midten og decelererer mod yderpunkterne.
       </p>
@@ -83,6 +83,12 @@
               <span id="easingValue">0.00</span>
             </div>
             <input id="easingSlider" type="range" min="0" max="0.98" step="0.01" value="0" />
+          </div>
+          <div class="card alignment-card">
+            <div class="label">Moon alignment</div>
+            <div class="value" id="lastAlignmentValue">Ingen endnu</div>
+            <div class="label" style="margin-top: 8px">Next alignment</div>
+            <div class="value" id="nextAlignmentValue">Beregner…</div>
           </div>
 
           <div class="control">
