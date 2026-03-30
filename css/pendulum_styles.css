@@ -27,7 +27,7 @@ body {
 }
 
 .app {
-  width: min(920px, 100%);
+  width: min(1200px, 100%);
   background: rgba(23, 26, 33, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 20px;
@@ -185,7 +185,7 @@ h2 {
 }
 
 .value {
-  font-size: 1.08rem;
+  font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
 }
 

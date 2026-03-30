@@ -82,7 +82,7 @@ const DEFAULTS = {
   continuousTone: false,
   audioMode: "day", // 'day' | 'angle' | 'off'
   lastAngleFreqStep: null,
-  angleFreqSteps: 50,
+  angleFreqSteps: 250,
 };
 
 const state = {
@@ -591,7 +591,6 @@ const controller = {
     requestAnimationFrame((nextTs) => this.tick(nextTs));
   },
   bindEvents() {
-    console.log("bindEvents called");
     elements.durationSlider.addEventListener("input", () => {
       state.realDuration = parseFloat(elements.durationSlider.value);
       ui.updateLabels();
@@ -615,7 +614,6 @@ const controller = {
     });
 
     elements.audioModeOff.addEventListener("change", () => {
-      console.log("change");
       if (elements.audioModeOff.checked) {
         state.audioMode = "off";
         state.lastAngleFreqStep = null;
@@ -739,9 +737,6 @@ const controller = {
   },
   async init() {
     await this.loadPhaseDefinitions();
-
-    console.log("init started");
-
     ui.syncControlsToState();
     ui.updateLabels();
     this.refreshAlignmentPredictions();
