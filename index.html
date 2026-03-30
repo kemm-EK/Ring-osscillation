@@ -110,6 +110,38 @@
       box-shadow: 0 0 16px rgba(255,255,255,0.08);
     }
 
+    .orbit {
+      position: absolute;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      border: 1px dashed rgba(255,255,255,0.08);
+      pointer-events: none;
+    }
+
+    .orbit-b {
+      width: 260px;
+      height: 260px;
+      border-color: rgba(124,196,255,0.14);
+    }
+
+    .dot {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 16px rgba(255,255,255,0.16);
+    }
+
+    .dot-a { background: #ffd166; }
+    .dot-b { background: #7cc4ff; }
+
     .arm.a { background: var(--line-a); }
     .arm.b { background: var(--line-b); }
 
@@ -261,6 +293,12 @@
             <div class="crosshair-x"></div>
             <div class="crosshair-y"></div>
             <div class="system">
+              <div class="orbit orbit-a" id="orbitA">
+                <div class="dot dot-a" id="dotA"></div>
+              </div>
+              <div class="orbit orbit-b" id="orbitB">
+                <div class="dot dot-b" id="dotB"></div>
+              </div>
               <div class="arm a" id="armA"></div>
               <div class="arm b" id="armB"></div>
             </div>
@@ -330,6 +368,60 @@
 
         <div class="control">
           <div class="control-head">
+            <span>Bip: lav frekvens (yderpunkt)</span>
+            <span id="beepLowValue">440 Hz</span>
+          </div>
+          <input id="beepLowSlider" type="range" min="100" max="2000" step="1" value="440" />
+        </div>
+
+        <div class="control">
+          <div class="control-head">
+            <span>Bip: høj frekvens (midte)</span>
+            <span id="beepHighValue">880 Hz</span>
+          </div>
+          <input id="beepHighSlider" type="range" min="200" max="4000" step="1" value="880" />
+        </div>
+
+        <div class="control">
+          <div class="control-head">
+            <span>Orbit A: dage pr. omgang</span>
+            <span id="orbitADaysValue">10.0 dage</span>
+          </div>
+          <input id="orbitADaysSlider" type="range" min="0.5" max="365" step="0.5" value="10" />
+        </div>
+
+        <div class="control">
+          <div class="control-head">
+            <span>Orbit A: retning</span>
+            <span id="orbitADirectionValue">Med uret</span>
+          </div>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;color:var(--text);">
+            <input id="orbitADirectionToggle" type="checkbox" style="width:18px;height:18px;cursor:pointer;" />
+            <span>Slå til for mod uret</span>
+          </label>
+        </div>
+
+        <div class="control">
+          <div class="control-head">
+            <span>Orbit B: dage pr. omgang</span>
+            <span id="orbitBDaysValue">18.0 dage</span>
+          </div>
+          <input id="orbitBDaysSlider" type="range" min="0.5" max="365" step="0.5" value="18" />
+        </div>
+
+        <div class="control">
+          <div class="control-head">
+            <span>Orbit B: retning</span>
+            <span id="orbitBDirectionValue">Med uret</span>
+          </div>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;color:var(--text);">
+            <input id="orbitBDirectionToggle" type="checkbox" style="width:18px;height:18px;cursor:pointer;" />
+            <span>Slå til for mod uret</span>
+          </label>
+        </div>
+
+        <div class="control">
+          <div class="control-head">
             <span>Lyd ved ny dag</span>
             <span id="beepValue">Fra</span>
           </div>
@@ -352,7 +444,7 @@
     <div class="stage-wrap" style="margin-top: 24px;">
       <h2 style="margin:0 0 12px;font-size:1.05rem;">Vinkler ved hver dags begyndelse</h2>
       <div style="color: var(--muted); font-size: 0.9rem; margin-bottom: 12px; line-height: 1.5;">
-        Tabellen viser vinklen for begge streger ved starten af hver simuleret dag. Dage, hvor stregerne mødes i midten og dermed krydser hinanden i løbet af dagen, er markeret.
+        Tabellen viser vinklen for begge streger ved starten af hver simuleret dag. Dage, hvor stregerne mødes i midten og dermed krydser hinanden i løbet af dagen, er markeret. Bip-frekvensen følger vinklen ved dagens skift: lavest ved størst vinkel og højest ved midten.
       </div>
       <div style="overflow:auto; max-height: 360px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.06);">
         <table style="width:100%; border-collapse: collapse; min-width: 560px; background: rgba(255,255,255,0.02);">
@@ -363,6 +455,7 @@
               <th style="text-align:left; padding: 12px; border-bottom:1px solid rgba(255,255,255,0.08);">Streg A</th>
               <th style="text-align:left; padding: 12px; border-bottom:1px solid rgba(255,255,255,0.08);">Streg B</th>
               <th style="text-align:left; padding: 12px; border-bottom:1px solid rgba(255,255,255,0.08);">Krydsning</th>
+              <th style="text-align:left; padding: 12px; border-bottom:1px solid rgba(255,255,255,0.08);">Bip-frekvens</th>
             </tr>
           </thead>
           <tbody id="angleTableBody"></tbody>
@@ -374,16 +467,30 @@
   <script>
     const armA = document.getElementById('armA');
     const armB = document.getElementById('armB');
+    const dotA = document.getElementById('dotA');
+    const dotB = document.getElementById('dotB');
 
     const durationSlider = document.getElementById('durationSlider');
     const daysSlider = document.getElementById('daysSlider');
     const easingSlider = document.getElementById('easingSlider');
     const amplitudeSlider = document.getElementById('amplitudeSlider');
+    const beepLowSlider = document.getElementById('beepLowSlider');
+    const beepHighSlider = document.getElementById('beepHighSlider');
+    const orbitADaysSlider = document.getElementById('orbitADaysSlider');
+    const orbitBDaysSlider = document.getElementById('orbitBDaysSlider');
+    const orbitADirectionToggle = document.getElementById('orbitADirectionToggle');
+    const orbitBDirectionToggle = document.getElementById('orbitBDirectionToggle');
 
     const durationValue = document.getElementById('durationValue');
     const daysValue = document.getElementById('daysValue');
     const easingValue = document.getElementById('easingValue');
     const amplitudeValue = document.getElementById('amplitudeValue');
+    const beepLowValue = document.getElementById('beepLowValue');
+    const beepHighValue = document.getElementById('beepHighValue');
+    const orbitADaysValue = document.getElementById('orbitADaysValue');
+    const orbitBDaysValue = document.getElementById('orbitBDaysValue');
+    const orbitADirectionValue = document.getElementById('orbitADirectionValue');
+    const orbitBDirectionValue = document.getElementById('orbitBDirectionValue');
 
     const angleAReadout = document.getElementById('angleAReadout');
     const angleBReadout = document.getElementById('angleBReadout');
@@ -404,6 +511,12 @@
       simulatedDays: parseFloat(daysSlider.value),
       easing: parseFloat(easingSlider.value),
       amplitude: parseFloat(amplitudeSlider.value),
+      beepLowFreq: parseFloat(beepLowSlider.value),
+      beepHighFreq: parseFloat(beepHighSlider.value),
+      orbitADays: parseFloat(orbitADaysSlider.value),
+      orbitBDays: parseFloat(orbitBDaysSlider.value),
+      orbitADirection: 1,
+      orbitBDirection: 1,
       elapsedMs: 0,
       lastTs: 0,
       running: true,
@@ -417,6 +530,12 @@
       daysValue.textContent = `${state.simulatedDays.toFixed(1)} dage`;
       easingValue.textContent = state.easing.toFixed(2);
       amplitudeValue.textContent = `${state.amplitude.toFixed(0)}°`;
+      beepLowValue.textContent = `${state.beepLowFreq.toFixed(0)} Hz`;
+      beepHighValue.textContent = `${state.beepHighFreq.toFixed(0)} Hz`;
+      orbitADaysValue.textContent = `${state.orbitADays.toFixed(1)} dage`;
+      orbitBDaysValue.textContent = `${state.orbitBDays.toFixed(1)} dage`;
+      orbitADirectionValue.textContent = state.orbitADirection === 1 ? 'Med uret' : 'Mod uret';
+      orbitBDirectionValue.textContent = state.orbitBDirection === 1 ? 'Med uret' : 'Mod uret';
       totalDaysLabel.textContent = `${state.simulatedDays.toFixed(0)} dage`;
       beepValue.textContent = state.beepEnabled ? 'Til' : 'Fra';
     }
@@ -437,7 +556,7 @@
       return `${min}m ${sec.toFixed(1)}s`;
     }
 
-    function playBeep() {
+    function playBeep(frequency) {
       if (!state.beepEnabled) return;
       if (!state.audioCtx) {
         state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -447,15 +566,36 @@
       const gain = ctx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.value = 880;
+      osc.frequency.value = frequency;
       gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.13);
+    }
+
+    function getBeepFrequencyAtAngle(angle) {
+      const normalized = 1 - Math.min(Math.abs(angle) / state.amplitude, 1);
+      return state.beepLowFreq * Math.pow(state.beepHighFreq / state.beepLowFreq, normalized);
+    }
+
+    function updateOrbitDots(elapsedDays) {
+      const angleA = ((elapsedDays / state.orbitADays) * Math.PI * 2) * state.orbitADirection;
+      const angleB = ((elapsedDays / state.orbitBDays) * Math.PI * 2) * state.orbitBDirection;
+
+      const radiusA = 90;
+      const radiusB = 130;
+
+      const ax = Math.cos(angleA - Math.PI / 2) * radiusA;
+      const ay = Math.sin(angleA - Math.PI / 2) * radiusA;
+      const bx = Math.cos(angleB - Math.PI / 2) * radiusB;
+      const by = Math.sin(angleB - Math.PI / 2) * radiusB;
+
+      dotA.style.transform = `translate(calc(-50% + ${ax}px), calc(-50% + ${ay}px))`;
+      dotB.style.transform = `translate(calc(-50% + ${bx}px), calc(-50% + ${by}px))`;
     }
 
     function getBaseAtProgress(progressFraction) {
@@ -490,6 +630,7 @@
 
         const nextFraction = Math.min((day + 1) / state.simulatedDays, 1);
         const crossing = day < state.simulatedDays && dayCrossesCenter(clampedStartFraction, nextFraction);
+        const beepFreq = getBeepFrequencyAtAngle(angleA);
 
         rows.push(`
           <tr style="background:${crossing ? 'rgba(124,196,255,0.12)' : 'transparent'};">
@@ -498,6 +639,7 @@
             <td style="padding: 10px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">${angleA.toFixed(2)}°</td>
             <td style="padding: 10px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">${angleB.toFixed(2)}°</td>
             <td style="padding: 10px 12px; border-bottom:1px solid rgba(255,255,255,0.06); color:${crossing ? 'var(--accent)' : 'var(--muted)'};">${crossing ? 'Ja' : 'Nej'}</td>
+            <td style="padding: 10px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">${beepFreq.toFixed(1)} Hz</td>
           </tr>
         `);
       }
@@ -524,6 +666,7 @@
 
       const elapsedDays = wrapped * state.simulatedDays;
       const pct = wrapped * 100;
+      updateOrbitDots(elapsedDays);
 
       angleAReadout.textContent = `${angleA.toFixed(2)}°`;
       angleBReadout.textContent = `${angleB.toFixed(2)}°`;
@@ -535,7 +678,7 @@
       const wholeDay = Math.floor(elapsedDays);
       if (state.running && state.beepEnabled && wholeDay !== state.lastBeepDay) {
         if (elapsedDays > 0) {
-          playBeep();
+          playBeep(getBeepFrequencyAtAngle(angleA));
         }
         state.lastBeepDay = wholeDay;
       }
@@ -577,6 +720,48 @@
       state.amplitude = parseFloat(amplitudeSlider.value);
       updateLabels();
       updateAngleTable();
+      render();
+    });
+
+    beepLowSlider.addEventListener('input', () => {
+      state.beepLowFreq = parseFloat(beepLowSlider.value);
+      if (state.beepHighFreq < state.beepLowFreq) {
+        state.beepHighFreq = state.beepLowFreq;
+        beepHighSlider.value = String(state.beepHighFreq);
+      }
+      updateLabels();
+    });
+
+    beepHighSlider.addEventListener('input', () => {
+      state.beepHighFreq = parseFloat(beepHighSlider.value);
+      if (state.beepHighFreq < state.beepLowFreq) {
+        state.beepLowFreq = state.beepHighFreq;
+        beepLowSlider.value = String(state.beepLowFreq);
+      }
+      updateLabels();
+    });
+
+    orbitADaysSlider.addEventListener('input', () => {
+      state.orbitADays = parseFloat(orbitADaysSlider.value);
+      updateLabels();
+      render();
+    });
+
+    orbitBDaysSlider.addEventListener('input', () => {
+      state.orbitBDays = parseFloat(orbitBDaysSlider.value);
+      updateLabels();
+      render();
+    });
+
+    orbitADirectionToggle.addEventListener('change', () => {
+      state.orbitADirection = orbitADirectionToggle.checked ? -1 : 1;
+      updateLabels();
+      render();
+    });
+
+    orbitBDirectionToggle.addEventListener('change', () => {
+      state.orbitBDirection = orbitBDirectionToggle.checked ? -1 : 1;
+      updateLabels();
       render();
     });
 
