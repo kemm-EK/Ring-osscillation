@@ -381,6 +381,28 @@ button:hover {
     filter: brightness(1);
   }
 }
+.entity-name {
+  position: absolute;
+  color: var(--text);
+  font-size: 0.78rem;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  pointer-events: none;
+  left: 50%;
+  top: 50%;
+}
+
+.arm-name,
+.orbit .entity-name {
+  transform: translate(-50%, -50%);
+}
+
+.names-hidden .entity-name {
+  display: none;
+}
 
 @media (max-width: 820px) {
   .layout {

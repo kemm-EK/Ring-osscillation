@@ -44,6 +44,23 @@ const elements = {
   stage: $("stage"),
   lastAlignmentValue: $("lastAlignmentValue"),
   nextAlignmentValue: $("nextAlignmentValue"),
+  phaseDesignationValue: $("phaseDesignationValue"),
+  phaseNameValue: $("phaseNameValue"),
+  phaseMotionValue: $("phaseMotionValue"),
+  phaseEnergyValue: $("phaseEnergyValue"),
+  specialEventValue: $("specialEventValue"),
+  showNamesToggle: $("showNamesToggle"),
+  showNamesValue: $("showNamesValue"),
+  labelQuinaia: $("labelQuinaia"),
+  labelElrunai: $("labelElrunai"),
+  labelChari: $("labelChari"),
+  labelMar: $("labelMar"),
+  app: document.querySelector(".app"),
+  body: document.body,
+  labelQuinaia: $("labelQuinaia"),
+  labelElrunai: $("labelElrunai"),
+  labelChari: $("labelChari"),
+  labelMar: $("labelMar"),
 };
 
 const DEFAULTS = {
@@ -71,6 +88,9 @@ const state = {
   nextAlignmentDay: null,
   lastAlignmentIndex: -1,
   alignmentFlashLock: false,
+  showNames: true,
+  phaseDefinitions: {},
+  specialEventText: "Ingen aktiv begivenhed",
 };
 
 const audio = {
@@ -229,16 +249,18 @@ const simulation = {
 
   findNextAlignment(fromDay) {
     const maxSearchDays = Math.max(state.orbitADays, state.orbitBDays) * 4;
-    const step = 1 / 24; // 1 time
+    const step = 1 / 24;
     const threshold = 0.01;
+    const minimumGapDays = 6 / 24;
 
-    const startDay = Math.floor(fromDay) + 1;
-    let prevDelta = this.getAlignmentDelta(startDay);
+    let prevDelta = this.getAlignmentDelta(fromDay);
 
-    for (let d = startDay + step; d <= startDay + maxSearchDays; d += step) {
+    for (let d = fromDay + step; d <= fromDay + maxSearchDays; d += step) {
       const currentDelta = this.getAlignmentDelta(d);
 
-      if (currentDelta < threshold || (currentDelta > prevDelta && prevDelta < threshold * 2)) {
+      const alignmentFound = currentDelta < threshold || (currentDelta > prevDelta && prevDelta < threshold * 2);
+
+      if (alignmentFound && d - fromDay >= minimumGapDays) {
         return d - step;
       }
 
@@ -246,6 +268,32 @@ const simulation = {
     }
 
     return null;
+  },
+  getPhaseKey(angle) {
+    const abs = Math.abs(angle);
+    const snapped = abs < 5 ? 0 : abs < 15 ? 10 : abs < 25 ? 20 : 30;
+
+    if (angle >= 0) {
+      const movingOut = Math.cos((state.elapsedMs / 1000 / state.realDuration) * Math.PI * 2) > 0;
+      if (snapped === 30) return "right_out_30";
+      if (snapped === 0) return "right_out_0";
+      return movingOut ? `right_out_${snapped}` : `right_in_${snapped}`;
+    }
+
+    const movingOut = Math.cos((state.elapsedMs / 1000 / state.realDuration) * Math.PI * 2) < 0;
+    if (snapped === 30) return "left_out_30";
+    if (snapped === 0) return "left_out_0";
+    return movingOut ? `left_out_${snapped}` : `left_in_${snapped}`;
+  },
+  formatDayDifference(fromDay, toDay) {
+    const diff = toDay - fromDay;
+
+    if (diff < 1) {
+      const hours = diff * 24;
+      return `${hours.toFixed(1)} timer`;
+    }
+
+    return `${diff.toFixed(2)} dage`;
   },
 };
 
@@ -263,6 +311,7 @@ const ui = {
     elements.orbitBDirectionToggle.checked = state.orbitBDirection === -1;
     elements.beepToggle.checked = state.beepEnabled;
     elements.continuousToneToggle.checked = state.continuousTone;
+    elements.showNamesToggle.checked = state.showNames;
   },
   updateLabels() {
     elements.durationValue.textContent = `${state.realDuration.toFixed(1)} s`;
@@ -278,9 +327,27 @@ const ui = {
     elements.totalDaysLabel.textContent = `${state.simulatedDays.toFixed(1)} dage pr. svingperiode`;
     elements.beepValue.textContent = !state.beepEnabled ? "Fra" : state.continuousTone ? "Kontinuerlig" : "Enkelte bip";
     elements.playPauseBtn.textContent = state.running ? "Pause" : "Afspil";
-    elements.lastAlignmentValue.textContent = state.lastAlignmentDay === null ? "Ingen endnu" : simulation.formatDayTime(state.lastAlignmentDay);
+    if (state.lastAlignmentDay === null) {
+      elements.lastAlignmentValue.textContent = "Ingen endnu";
+    } else {
+      const currentDay = (state.elapsedMs / 1000 / state.realDuration) * state.simulatedDays;
 
-    elements.nextAlignmentValue.textContent = state.nextAlignmentDay === null ? "Ikke fundet" : simulation.formatDayTime(state.nextAlignmentDay);
+      const formatted = simulation.formatDayTime(state.lastAlignmentDay);
+      const diff = simulation.formatDayDifference(state.lastAlignmentDay, currentDay);
+
+      elements.lastAlignmentValue.textContent = `${formatted} (${diff} siden)`;
+    }
+    if (state.nextAlignmentDay === null) {
+      elements.nextAlignmentValue.textContent = "Ikke fundet";
+    } else {
+      const currentDay = (state.elapsedMs / 1000 / state.realDuration) * state.simulatedDays;
+
+      const formatted = simulation.formatDayTime(state.nextAlignmentDay);
+      const diff = simulation.formatDayDifference(currentDay, state.nextAlignmentDay);
+
+      elements.nextAlignmentValue.textContent = `${formatted} (om ${diff})`;
+    }
+    elements.showNamesValue.textContent = state.showNames ? "Til" : "Fra";
   },
   updateOrbitDots(elapsedDays) {
     const angleA = (elapsedDays / state.orbitADays) * Math.PI * 2 * state.orbitADirection;
@@ -291,8 +358,12 @@ const ui = {
     const ay = Math.sin(angleA - Math.PI / 2) * radiusA;
     const bx = Math.cos(angleB - Math.PI / 2) * radiusB;
     const by = Math.sin(angleB - Math.PI / 2) * radiusB;
+
     elements.dotA.style.transform = `translate(calc(-50% + ${ax}px), calc(-50% + ${ay}px))`;
     elements.dotB.style.transform = `translate(calc(-50% + ${bx}px), calc(-50% + ${by}px))`;
+
+    elements.labelChari.style.transform = `translate(calc(-50% + ${ax + 18}px), calc(-50% + ${ay - 18}px))`;
+    elements.labelMar.style.transform = `translate(calc(-50% + ${bx + 18}px), calc(-50% + ${by - 18}px))`;
   },
   updateAngleTable() {
     const totalWholeDays = Math.floor(state.simulatedDays);
@@ -326,9 +397,39 @@ const ui = {
     const alignmentThreshold = 0.01;
     const alignmentIndex = Math.floor(simulatedElapsedDays * 24); // time buckets
     const { angleA, angleB } = simulation.getAngles(progress);
+    const phaseKey = simulation.getPhaseKey(angleA);
+    const phase = state.phaseDefinitions[phaseKey];
+
+    if (phase) {
+      elements.phaseDesignationValue.textContent = phase.designation;
+      elements.phaseNameValue.textContent = phase.name;
+      elements.phaseMotionValue.textContent = phase.motion;
+      elements.phaseEnergyValue.textContent = phase.energy;
+    }
+
+    elements.specialEventValue.textContent = state.specialEventText;
+    document.body.classList.toggle("names-hidden", !state.showNames);
 
     elements.armA.style.transform = `translate(-50%, -50%) rotate(${angleA}deg)`;
     elements.armB.style.transform = `translate(-50%, -50%) rotate(${angleB}deg)`;
+    const armLabelDistance = 125;
+
+    const angleARad = (angleA * Math.PI) / 180;
+    const angleBRad = (angleB * Math.PI) / 180;
+
+    const quinaiaX = Math.sin(angleARad) * armLabelDistance;
+    const quinaiaY = -Math.cos(angleARad) * armLabelDistance;
+
+    const elrunaiX = Math.sin(angleBRad) * armLabelDistance;
+    const elrunaiY = -Math.cos(angleBRad) * armLabelDistance;
+
+    elements.labelQuinaia.style.left = "50%";
+    elements.labelQuinaia.style.top = "50%";
+    elements.labelQuinaia.style.transform = `translate(calc(-50% + ${quinaiaX}px), calc(-50% + ${quinaiaY}px))`;
+
+    elements.labelElrunai.style.left = "50%";
+    elements.labelElrunai.style.top = "50%";
+    elements.labelElrunai.style.transform = `translate(calc(-50% + ${elrunaiX}px), calc(-50% + ${elrunaiY + 22}px))`;
     elements.armA.style.left = "50%";
     elements.armA.style.top = "50%";
     elements.armB.style.left = "50%";
@@ -514,8 +615,14 @@ const controller = {
       ui.updateLabels();
       ui.render();
     });
+    elements.showNamesToggle.addEventListener("change", () => {
+      state.showNames = elements.showNamesToggle.checked;
+      ui.updateLabels();
+      ui.render();
+    });
   },
-  init() {
+  async init() {
+    await this.loadPhaseDefinitions();
     ui.syncControlsToState();
     ui.updateLabels();
     this.refreshAlignmentPredictions();
@@ -523,6 +630,7 @@ const controller = {
     ui.updateAngleTable();
     ui.render();
     this.bindEvents();
+    requestAnimationFrame((ts) => this.tick(ts));
     window.addEventListener("resize", () => {
       ui.updateOrbitSizes();
       ui.render();
@@ -533,6 +641,10 @@ const controller = {
     const currentDay = (state.elapsedMs / 1000 / state.realDuration) * state.simulatedDays;
     state.nextAlignmentDay = simulation.findNextAlignment(currentDay);
     ui.updateLabels();
+  },
+  async loadPhaseDefinitions() {
+    const response = await fetch("./json/phase_definitions.json");
+    state.phaseDefinitions = await response.json();
   },
 };
 

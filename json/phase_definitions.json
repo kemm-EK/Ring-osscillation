@@ -1,0 +1,74 @@
+{
+  "right_out_0": {
+    "designation": "?1st alignment",
+    "name": "Conflict",
+    "motion": "High Friction",
+    "energy": "Pull ^ Pull"
+  },
+  "right_out_10": {
+    "designation": "?Right Rise",
+    "name": "Rejection",
+    "motion": "-",
+    "energy": "Neutral"
+  },
+  "right_out_20": {
+    "designation": "?Right Reach",
+    "name": "Strain",
+    "motion": "Reluctant",
+    "energy": "Neutral"
+  },
+  "right_out_30": {
+    "designation": "?Right Apex",
+    "name": "Quinaia's Tension",
+    "motion": "Stagnant",
+    "energy": "Strong PULL"
+  },
+  "right_in_20": {
+    "designation": "?Right Return",
+    "name": "Quinaia Yields",
+    "motion": "Release",
+    "energy": "Neutral"
+  },
+  "right_in_10": {
+    "designation": "?Right Descent",
+    "name": "Approacing",
+    "motion": "Accelerating",
+    "energy": "Neutral"
+  },
+  "left_out_0": {
+    "designation": "?Alignment",
+    "name": "Conflict",
+    "motion": "High Friction",
+    "energy": "Push ^ Pull"
+  },
+  "left_out_10": {
+    "designation": "?Left Rise",
+    "name": "Rejection",
+    "motion": "Deceleration",
+    "energy": "Neutral"
+  },
+  "left_out_20": {
+    "designation": "?Left Reach",
+    "name": "Silent Wrath",
+    "motion": "-",
+    "energy": "Neutral"
+  },
+  "left_out_30": {
+    "designation": "?Left Apex",
+    "name": "Elrunai's Anger",
+    "motion": "Stagnation",
+    "energy": "Strong PUSH"
+  },
+  "left_in_20": {
+    "designation": "?Left Return",
+    "name": "Elrunai Yields",
+    "motion": "Release",
+    "energy": "Neutral"
+  },
+  "left_in_10": {
+    "designation": "?Left Descent",
+    "name": "Approacing",
+    "motion": "Accelerating",
+    "energy": "Neutral"
+  }
+}

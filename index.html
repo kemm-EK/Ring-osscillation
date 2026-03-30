@@ -22,12 +22,19 @@
               <div class="system">
                 <div class="orbit orbit-a" id="orbitA">
                   <div class="dot dot-a" id="dotA"></div>
+                  <div class="entity-name" id="labelChari">Chari</div>
                 </div>
+
                 <div class="orbit orbit-b" id="orbitB">
                   <div class="dot dot-b" id="dotB"></div>
+                  <div class="entity-name" id="labelMar">Mar</div>
                 </div>
+
                 <div class="arm a" id="armA"></div>
                 <div class="arm b" id="armB"></div>
+
+                <div class="entity-name arm-name arm-name-a" id="labelQuinaia">Quinaia</div>
+                <div class="entity-name arm-name arm-name-b" id="labelElrunai">Elrunai</div>
               </div>
             </div>
 
@@ -46,6 +53,27 @@
               </div>
             </div>
 
+            <div class="readout" style="margin-top: 12px; grid-template-columns: 1fr">
+              <div class="card">
+                <div class="label">Aktuel fase</div>
+                <div class="value" id="phaseDesignationValue">–</div>
+
+                <div class="label" style="margin-top: 8px">Navn</div>
+                <div class="value" id="phaseNameValue">–</div>
+
+                <div class="label" style="margin-top: 8px">Bevægelse</div>
+                <div class="value" id="phaseMotionValue">–</div>
+
+                <div class="label" style="margin-top: 8px">Energi</div>
+                <div class="value" id="phaseEnergyValue">–</div>
+              </div>
+
+              <div class="card">
+                <div class="label">Særlig begivenhed</div>
+                <div class="value" id="specialEventValue">Ingen aktiv begivenhed</div>
+              </div>
+            </div>
+
             <div class="timeline-wrap">
               <div class="timeline-top">
                 <span>0 dage</span>
@@ -61,6 +89,16 @@
         </div>
 
         <div class="controls">
+          <div class="control">
+            <div class="control-head">
+              <span>Vis navne på elementer</span>
+              <span id="showNamesValue">Til</span>
+            </div>
+            <label class="toggle-label">
+              <input id="showNamesToggle" type="checkbox" checked />
+              <span>Vis Quinaia, Elrunai, Chari og Mar</span>
+            </label>
+          </div>
           <div class="control">
             <div class="control-head">
               <span>Tempo (realtid for hele forløbet)</span>
