@@ -124,6 +124,7 @@ h2 {
 
 .arm.b {
   background: var(--line-b);
+  height: 190px;
 }
 
 .orbit {

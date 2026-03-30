@@ -61,6 +61,10 @@ const elements = {
   labelElrunai: $("labelElrunai"),
   labelChari: $("labelChari"),
   labelMar: $("labelMar"),
+  audioModeDay: $("audioModeDay"),
+  audioModeAngle: $("audioModeAngle"),
+  audioModeOff: $("audioModeOff"),
+  audioModeValue: $("audioModeValue"),
 };
 
 const DEFAULTS = {
@@ -75,7 +79,10 @@ const DEFAULTS = {
   orbitADirection: 1,
   orbitBDirection: 1,
   beepEnabled: true,
-  continuousTone: true,
+  continuousTone: false,
+  audioMode: "day", // 'day' | 'angle' | 'off'
+  lastAngleFreqStep: null,
+  angleFreqSteps: 50,
 };
 
 const state = {
@@ -98,7 +105,7 @@ const audio = {
   toneOsc: null,
   toneGain: null,
   baseGain: 0.015,
-  accentFactor: 1.05,
+  accentFactor: 1.15,
   ensureContext() {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -174,6 +181,25 @@ const audio = {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.17);
+  },
+  playAngleTick(frequency) {
+    if (!state.beepEnabled) return;
+
+    const ctx = this.ensureContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "triangle";
+    osc.frequency.value = frequency;
+
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.03, ctx.currentTime + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.05);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.055);
   },
 };
 
@@ -295,6 +321,33 @@ const simulation = {
 
     return `${diff.toFixed(2)} dage`;
   },
+  formatTimeUntilAlignment(diffDays) {
+    if (diffDays <= 0) return "nu";
+
+    const days = Math.floor(diffDays);
+    const hours = Math.floor((diffDays - days) * 24);
+
+    if (days > 0) {
+      return `${days} dage, ${hours} timer`;
+    }
+
+    return `${hours} timer`;
+  },
+  getAngleFrequency(angle) {
+    const normalized = Math.min(Math.abs(angle) / state.amplitude, 1);
+    return state.beepHighFreq * Math.pow(state.beepLowFreq / state.beepHighFreq, normalized);
+  },
+  getFrequencyStepIndex(frequency) {
+    const min = state.beepLowFreq;
+    const max = state.beepHighFreq;
+
+    if (max <= min) return 0;
+
+    const normalized = (frequency - min) / (max - min);
+    const clamped = Math.max(0, Math.min(0.999999, normalized));
+
+    return Math.floor(clamped * state.angleFreqSteps);
+  },
 };
 
 const ui = {
@@ -312,6 +365,9 @@ const ui = {
     elements.beepToggle.checked = state.beepEnabled;
     elements.continuousToneToggle.checked = state.continuousTone;
     elements.showNamesToggle.checked = state.showNames;
+    elements.audioModeDay.checked = state.audioMode === "day";
+    elements.audioModeAngle.checked = state.audioMode === "angle";
+    elements.audioModeOff.checked = state.audioMode === "off";
   },
   updateLabels() {
     elements.durationValue.textContent = `${state.realDuration.toFixed(1)} s`;
@@ -335,7 +391,7 @@ const ui = {
       const formatted = simulation.formatDayTime(state.lastAlignmentDay);
       const diff = simulation.formatDayDifference(state.lastAlignmentDay, currentDay);
 
-      elements.lastAlignmentValue.textContent = `${formatted} (${diff} siden)`;
+      elements.lastAlignmentValue.textContent = `${formatted}`;
     }
     if (state.nextAlignmentDay === null) {
       elements.nextAlignmentValue.textContent = "Ikke fundet";
@@ -348,16 +404,22 @@ const ui = {
       elements.nextAlignmentValue.textContent = `${formatted} (om ${diff})`;
     }
     elements.showNamesValue.textContent = state.showNames ? "Til" : "Fra";
+    elements.audioModeValue.textContent = state.audioMode === "day" ? "Dag" : state.audioMode === "angle" ? "Vinkel" : "Fra";
   },
   updateOrbitDots(elapsedDays) {
     const angleA = (elapsedDays / state.orbitADays) * Math.PI * 2 * state.orbitADirection;
     const angleB = (elapsedDays / state.orbitBDays) * Math.PI * 2 * state.orbitBDirection;
     const radiusA = elements.orbitA.offsetWidth / 2;
-    const radiusB = elements.orbitB.offsetWidth / 2;
+    const baseRadiusB = elements.orbitB.offsetWidth / 2;
+
+    const radiusBX = baseRadiusB;
+    const radiusBY = baseRadiusB * 1.04;
+
     const ax = Math.cos(angleA - Math.PI / 2) * radiusA;
     const ay = Math.sin(angleA - Math.PI / 2) * radiusA;
-    const bx = Math.cos(angleB - Math.PI / 2) * radiusB;
-    const by = Math.sin(angleB - Math.PI / 2) * radiusB;
+
+    const bx = Math.cos(angleB - Math.PI / 2) * radiusBX;
+    const by = Math.sin(angleB - Math.PI / 2) * radiusBY;
 
     elements.dotA.style.transform = `translate(calc(-50% + ${ax}px), calc(-50% + ${ay}px))`;
     elements.dotB.style.transform = `translate(calc(-50% + ${bx}px), calc(-50% + ${by}px))`;
@@ -393,6 +455,12 @@ const ui = {
   render() {
     const progress = state.elapsedMs / 1000 / state.realDuration;
     const simulatedElapsedDays = progress * state.simulatedDays;
+    if (state.nextAlignmentDay !== null && elements.nextAlignmentValue) {
+      const diffDays = Math.max(0, state.nextAlignmentDay - simulatedElapsedDays);
+      const formattedDiff = simulation.formatTimeUntilAlignment(diffDays);
+
+      elements.nextAlignmentValue.textContent = `${simulation.formatDayTime(state.nextAlignmentDay)} (om ${formattedDiff})`;
+    }
     const alignmentDelta = simulation.getAlignmentDelta(simulatedElapsedDays);
     const alignmentThreshold = 0.01;
     const alignmentIndex = Math.floor(simulatedElapsedDays * 24); // time buckets
@@ -446,20 +514,38 @@ const ui = {
     elements.timelineFill.style.width = `${pct}%`;
     elements.timelineMarker.style.left = `${pct}%`;
 
-    const currentFrequency = simulation.getBeepFrequencyAtAngle(angleA);
+    const dayFrequency = simulation.getBeepFrequencyAtAngle(angleA);
+    const angleFrequency = simulation.getAngleFrequency(angleA);
+    if (state.audioMode === "angle" && state.running && state.beepEnabled) {
+      const currentStep = simulation.getFrequencyStepIndex(angleFrequency);
+
+      if (state.lastAngleFreqStep === null) {
+        state.lastAngleFreqStep = currentStep;
+      } else if (currentStep !== state.lastAngleFreqStep) {
+        audio.playAngleTick(angleFrequency);
+        state.lastAngleFreqStep = currentStep;
+      }
+    }
+
     if (state.beepEnabled && state.continuousTone && state.running) {
-      audio.startContinuousTone(currentFrequency);
+      if (state.audioMode === "day") {
+        audio.startContinuousTone(dayFrequency);
+      } else if (state.audioMode === "angle") {
+        audio.startContinuousTone(angleFrequency);
+      } else {
+        audio.stopContinuousTone();
+      }
     } else {
       audio.stopContinuousTone();
     }
 
     const wholeDay = Math.floor(simulatedElapsedDays);
-    if (state.running && state.beepEnabled && wholeDay !== state.lastBeepDay) {
+    if (state.audioMode === "day" && state.running && state.beepEnabled && wholeDay !== state.lastBeepDay) {
       if (simulatedElapsedDays > 0) {
         if (state.continuousTone) {
           audio.accentContinuousTone();
         } else {
-          audio.playBeep(currentFrequency);
+          audio.playBeep(dayFrequency);
         }
       }
       state.lastBeepDay = wholeDay;
@@ -505,9 +591,38 @@ const controller = {
     requestAnimationFrame((nextTs) => this.tick(nextTs));
   },
   bindEvents() {
+    console.log("bindEvents called");
     elements.durationSlider.addEventListener("input", () => {
       state.realDuration = parseFloat(elements.durationSlider.value);
       ui.updateLabels();
+    });
+    elements.audioModeDay.addEventListener("change", () => {
+      if (elements.audioModeDay.checked) {
+        state.audioMode = "day";
+        state.lastAngleFreqStep = null;
+        ui.updateLabels();
+        ui.render();
+      }
+    });
+
+    elements.audioModeAngle.addEventListener("change", () => {
+      if (elements.audioModeAngle.checked) {
+        state.audioMode = "angle";
+        state.lastAngleFreqStep = null;
+        ui.updateLabels();
+        ui.render();
+      }
+    });
+
+    elements.audioModeOff.addEventListener("change", () => {
+      console.log("change");
+      if (elements.audioModeOff.checked) {
+        state.audioMode = "off";
+        state.lastAngleFreqStep = null;
+        audio.stopContinuousTone();
+        ui.updateLabels();
+        ui.render();
+      }
     });
 
     elements.daysSlider.addEventListener("input", () => {
@@ -592,6 +707,7 @@ const controller = {
     elements.resetBtn.addEventListener("click", () => {
       state.elapsedMs = 0;
       state.lastBeepDay = -1;
+      state.lastAngleFreqStep = null;
       audio.stopContinuousTone();
       ui.render();
     });
@@ -623,6 +739,9 @@ const controller = {
   },
   async init() {
     await this.loadPhaseDefinitions();
+
+    console.log("init started");
+
     ui.syncControlsToState();
     ui.updateLabels();
     this.refreshAlignmentPredictions();
